@@ -6,6 +6,8 @@
  *
  */
 
+// vim:tw=0:ts=4:sw=4:et
+
 #include <Python.h>
 #include <stddef.h>
 #include <stdio.h>
