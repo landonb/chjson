@@ -1,5 +1,7 @@
-#!/bin/sh
+#!/bin/bash
 
-python setup.py build_ext --inplace
-python setup.py clean
+SCRIPT_DIR="$(dirname ${BASH_SOURCE[0]})"
+
+./${SCRIPT_DIR}/setup.sh build_ext --inplace
+./${SCRIPT_DIR}/setup.sh clean
 
