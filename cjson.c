@@ -1105,7 +1105,7 @@ JSON_encode(PyObject *self, PyObject *object)
 }
 
 
-/* Decode JSON representation into pyhton objects */
+/* Decode JSON representation into python objects */
 
 static PyObject*
 JSON_decode(PyObject *self, PyObject *args, PyObject *kwargs)
