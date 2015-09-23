@@ -1,4 +1,4 @@
 .gitignore
 build/*
-cjson.so
+cjsonish.so
 
