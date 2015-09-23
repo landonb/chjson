@@ -1,30 +1,34 @@
-#!/usr/bin/python2
+#!/usr/bin/python
 
-from distutils.core import setup, Extension
+from setuptools import setup, Extension
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 macros = [('MODULE_VERSION', __version__)]
 
-setup(name         = "python-cjson",
-      version      = __version__,
-      author       = "Dan Pascu",
-      author_email = "dan@ag-projects.com",
-      url          = "http://ag-projects.com/",
-      download_url = "http://cheeseshop.python.org/pypi/python-cjson/%s" % __version__,
-      description  = "Fast JSON encoder/decoder for Python",
-      long_description = open('README').read(),
-      license      = "LGPL",
-      platforms    = ["Platform Independent"],
-      classifiers  = [
+setup(
+    name = "python-cjsonish",
+    version = __version__,
+    #packages = find_packages(),
+    author = "Landon Bouma (using Dan Pascu's python-cjson code)",
+    author_email = "XXX",
+    #keywords = "XXX XXX XXX",
+    url = "https://github.com/landonb/python-cjsonish",
+    download_url = "https://github.com/landonb/python-cjsonish",
+    description = "Fast and loose JSON encoder/decoder for Python",
+    long_description = open('README').read(),
+    license = "LGPL",
+    platforms = ["Platform Independent"],
+    classifiers = [
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)",
         "Operating System :: OS Independent",
         "Programming Language :: Python",
         "Topic :: Software Development :: Libraries :: Python Modules"
-      ],
-      ext_modules  = [
-        Extension(name='cjson', sources=['cjson.c'], define_macros=macros)
-      ]
+    ],
+    ext_modules = [
+        Extension(name='cjsonish', sources=['cjsonish.c'], define_macros=macros)
+    ]
 )
+
