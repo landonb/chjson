@@ -381,7 +381,9 @@ decode_array(JSONData *jsondata)
                 next_state = ArrayDone;
             } else if (c == ',') {
                 jsondata->ptr++;
-                next_state = ArrayItem;
+                // cjsonish: Allow trailing comma.
+                //next_state = ArrayItem;
+                next_state = ArrayItem_or_ClosingBracket;
             } else {
                 PyErr_Format(JSON_DecodeError, "expecting ',' or ']' at "
                              "position " SSIZE_T_F,
@@ -493,7 +495,9 @@ decode_object(JSONData *jsondata)
                 next_state = DictionaryDone;
             } else if (c == ',') {
                 jsondata->ptr++;
-                next_state = DictionaryKey;
+                // cjsonish: Allow trailing comma.
+                //next_state = DictionaryKey;
+                next_state = DictionaryKey_or_ClosingBrace;
             } else {
                 PyErr_Format(JSON_DecodeError, "expecting ',' or '}' at "
                              "position " SSIZE_T_F,
