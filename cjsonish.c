@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <math.h>
+#include <signal.h> // To set breakpoints with: raise(SIGINT);
 
 typedef struct JSONData {
     char *str; // the actual json string
@@ -71,9 +72,9 @@ typedef int Py_ssize_t;
 #define Py_IS_NAN(X) ((X) != (X))
 #endif
 
-#define skipSpaces(d) while(isspace(*((d)->ptr))) (d)->ptr++
-
 // Py2to3 macros.
+
+#define skipSpaces(d) while(isspace(*((d)->ptr))) (d)->ptr++;
 
 #if PY_MAJOR_VERSION >= 3
     #define MOD_ERROR_VAL NULL
@@ -205,10 +206,17 @@ decode_string(JSONData *jsondata)
         object = PyUnicode_DecodeUnicodeEscape(jsondata->ptr+1, len, NULL);
     }
     else if (string_escape) {
-
-// FIXME: PROB WRONG
-        object = PyBytes_DecodeEscape(jsondata->ptr+1, len, NULL, 0, NULL);
-
+#if PY_MAJOR_VERSION >= 3
+        PyObject *obj = PyBytes_DecodeEscape(jsondata->ptr+1, len, NULL, 0, NULL);
+        object = PyUnicode_FromEncodedObject(obj, /*encoding=*/NULL, /*errors=*/NULL);
+        Py_DECREF(obj);
+        if (object == NULL) {
+            // MAYBE: Set error object?
+            return NULL;
+        }
+#else
+        object = PyString_DecodeEscape(jsondata->ptr+1, len, NULL, 0, NULL);
+#endif
     }
     else {
 #if PY_MAJOR_VERSION >= 3
@@ -904,6 +912,9 @@ encode_unicode(PyObject *unicode)
         case '\t':
         case '\r':
         case '\n':
+        // cjsonish additional:
+        case '\f':
+        case '\b':
             incr = 2;
             break;
         default:
@@ -1252,7 +1263,9 @@ encode_unicode(PyObject *unicode)
 
     // cjsonish:
     Py_UNICODE *s = PyUnicode_AS_UNICODE(unicode);
+    // FIXME: Is this right? Use PyUnicode_GET_SIZE and not Py_SIZE?
     Py_ssize_t size = PyUnicode_GET_SIZE(unicode);
+    //Py_ssize_t size = Py_SIZE(str);
     int quotes = 1;
 
     // XXX(nnorwitz): rather than over-allocating, it would be
@@ -2367,12 +2380,14 @@ JSON_decode(PyObject *self, PyObject *args, PyObject *kwargs)
         return NULL; // not a string object or it contains null bytes
     }
 
+    #if PY_MAJOR_VERSION >= 3
+    //Py_ssize_t str_size = PyUnicode_GET_SIZE(str);
+    Py_ssize_t str_size = Py_SIZE(str);
+    #else
+    Py_ssize_t str_size = PyString_GET_SIZE(str);
+    #endif
     jsondata.ptr = jsondata.str;
-#if PY_MAJOR_VERSION >= 3
-    jsondata.end = jsondata.str + PyUnicode_GET_SIZE(str);
-#else
-    jsondata.end = jsondata.str + PyString_GET_SIZE(str);
-#endif
+    jsondata.end = jsondata.str + str_size;
     jsondata.all_unicode = all_unicode;
 
     object = decode_json(&jsondata);
