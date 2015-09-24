@@ -16,7 +16,7 @@ setup(
     url = "https://github.com/landonb/python-cjsonish",
     download_url = "https://github.com/landonb/python-cjsonish",
     description = "Fast and loose JSON encoder/decoder for Python",
-    long_description = open('README').read(),
+    long_description = open('README.rst').read(),
     license = "LGPL",
     platforms = ["Platform Independent"],
     classifiers = [
