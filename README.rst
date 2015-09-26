@@ -4,7 +4,8 @@ cjsonish
 The ``cjonish`` Python C extension implements a developer friendly
 `JSON <http://www.json.org/>`__ codec.
 
-In addition to the machine-friendly JSON standard, it accepts:
+In addition to the machine-centric JSON standard,
+it accepts developer-pleasing syntax:
 
 * Single- ``//`` and multi-line ``/* */`` comments.
 * Trailing commas ``,``
@@ -57,6 +58,31 @@ path that should be side-loaded. (Read: ``cjsonish`` is faster than ``demjson``
 by around a factor, but it'll depend on your usage scenario.) In real-world
 numbers, application boot time decreased from 6.65 seconds to 0.95 for this
 scenario. Not a crazy gain but enough to ease development pains.
+
+
+Compilation
+-----------
+
+From the source directory, to make a debug build, try:
+
+.. code-block:: bash
+
+    /bin/rm -rf build/ dist/ python_cjsonish.egg-info/
+    python3 ./setup.py clean
+    CFLAGS='-Wall -O0 -g' python3 ./setup.py build
+    python3 ./setup.py install
+
+and then, e.g.,
+
+.. code-block:: bash
+
+    gdb python3
+    b JSON_decode
+    run
+    import cjsonish
+    cjsonish.decode('{"my": "example",} // ignored')
+
+Omit the ``CFLAGS`` to make a production build.
 
 References
 ~~~~~~~~~~
