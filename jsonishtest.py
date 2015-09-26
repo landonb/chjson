@@ -38,6 +38,9 @@ def _removeWhitespace(str):
     return str.replace(" ", "")
 
 class JsonTest(unittest.TestCase):
+
+    # *** [pdl]'s tests copiedish from jsontest.py.
+
     def testReadEmptyObject(self):
         obj = cjsonish.decode("{}")
         self.assertEqual({}, obj)
@@ -376,7 +379,17 @@ class JsonTest(unittest.TestCase):
             #                 r'\u1234\u1234\u1234\u1234\u1234\u1234"', s)
             self.assertEqual(r'u"\U0001d11e\U0001d11e\U0001d11e\U0001d11e'
                              r'\u1234\u1234\u1234\u1234\u1234\u1234"', s)
-        
+
+    # *** [lb]'s cjsonish tests.
+
+    def testObjectWithTrailingComment(self):
+        obj = cjsonish.decode('{"a":123,} // nothing')
+        self.assertEqual({"a": 123}, obj)
+
+    def testObjectWithCRNewlineAndComment(self):
+        obj = cjsonish.decode('{"a":null, \r    // nothing  \r"tup":(1,"a",True,),\r  }')
+        self.assertEqual({"a": None, "tup": (1, "a", True),}, obj)
+
 def main():
     unittest.main()
 
