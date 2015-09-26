@@ -2,16 +2,18 @@ Metadata-Version: 1.2
 Name: python-cjsonish
 Version: 1.2.0
 Summary: Fast and loose JSON encoder/decoder for Python
-Home-page: XXX
+Home-page: https://github.com/lbouma/cjsonish
 Author: Landon Bouma (using Dan Pascu's python-cjson code)
 Author-email: XXX
 License: LGPL
-Download-URL: https://github.com/landonb/python-cjsonish
-Description: This module implements a loose and fast JSON encoder/decoder for Python.
+Download-URL: https://github.com/lbouma/cjsonish
+Description: This module implements a quick and loose JSON encoder/decoder for Python.
         
-        Trailing commas and single-line comments are acceptable.
-		
-		Single-line comments // are stipped.
+        Trailing commas,
+        single- and multi-line comments,
+        single-quoted object keys,
+        and fractional numbers without leading zeros,
+        are all acceptable.
         
         C-implemented for C-crunching speed.
         
