@@ -57,13 +57,17 @@ class JsonTest(unittest.TestCase):
         obj = cjsonish.decode(r'"\""')
         self.assertEqual(r'"', obj)
 
-#    def testReadEscapedSolidus(self):
-#        obj = cjsonish.decode(r'"\/"')
-#        self.assertEqual(r'/', obj)
+    def testReadEscapedSolidus(self):
+        obj = cjsonish.decode(r'"\/"')
+        self.assertEqual(r'/', obj)
 
     def testReadEscapedReverseSolidus(self):
         obj = cjsonish.decode(r'"\\"')
-        self.assertEqual("\\", obj)
+        self.assertEqual('\\', obj)
+    def testReadEscapedEndingQuote(self):
+        self.assertRaises(cjsonish.DecodeError, self._testReadEscapedEndingQuote)
+    def _testReadEscapedEndingQuote(self):
+        cjsonish.decode('"\\"')
 
     def testReadEscapedBackspace(self):
         obj = cjsonish.decode(r'"\b"')
@@ -97,12 +101,12 @@ class JsonTest(unittest.TestCase):
 
     def testWriteEscapedSolidus(self):
         s = cjsonish.encode(r'/')
-        #self.assertEqual(r'"\/"', _removeWhitespace(s))
-        self.assertEqual('"/"', _removeWhitespace(s))
+        self.assertEqual(r'"\/"', _removeWhitespace(s))
+        # Same as: self.assertEqual('"\\/"', _removeWhitespace(s))
 
     def testWriteNonEscapedSolidus(self):
         s = cjsonish.encode(r'/')
-        self.assertEqual(r'"/"', _removeWhitespace(s))
+        self.assertEqual('"\\/"', _removeWhitespace(s))
 
     def testWriteEscapedReverseSolidus(self):
         s = cjsonish.encode("\\")
@@ -382,13 +386,168 @@ class JsonTest(unittest.TestCase):
 
     # *** [lb]'s cjsonish tests.
 
-    def testObjectWithTrailingComment(self):
+    def testObjectWithTrailingCommaAndComment(self):
         obj = cjsonish.decode('{"a":123,} // nothing')
         self.assertEqual({"a": 123}, obj)
 
-    def testObjectWithCRNewlineAndComment(self):
-        obj = cjsonish.decode('{"a":null, \r    // nothing  \r"tup":(1,"a",True,),\r  }')
-        self.assertEqual({"a": None, "tup": (1, "a", True),}, obj)
+    def testObjectWithDashAndTrailingCommaAndComment(self):
+        obj = cjsonish.decode('{"a-b": 123,} // nothing')
+        self.assertEqual({"a-b": 123}, obj)
+
+    def testObjectWithEmDashAndTrailingCommaAndComment(self):
+        obj = cjsonish.decode('{"a–b":123,} // nothing')
+        self.assertEqual({"a–b": 123}, obj)
+
+    def testObjectWithUuencodedEmDashAndTrailingCommaAndComment(self):
+        obj = cjsonish.decode('{"a\–b":123,} // nothing')
+        # FIXME/EXPLAIN: Is cjsonish really decoding this correctly? Seems weird.
+        self.assertEqual({"a\\u2013b": 123}, obj)
+
+    def testObjectWithBackslashAndEmDashAndTrailingCommaAndMLComment(self):
+        obj = cjsonish.decode('{"a\\–b":123,} /* nothing   */ \r\n')
+        # NOTE: Because of how \ works, sometimes \ and \\ are the same:
+        #       The string that Python reads and passes to cjosnish interprets
+        #       \ and \\ as the same: just one backslash.
+        self.assertEqual({'a\\u2013b': 123}, obj)
+
+    def testObjectWithBackslashAndEndOfString(self):
+        self.assertRaises(cjsonish.DecodeError, self._testObjectWithBackslashAndEndOfString)
+    def _testObjectWithBackslashAndEndOfString(self):
+        # This gets interpreted as a string key ('a": ')
+        # missing a colon (and instead finds a stray 'x').
+        cjsonish.decode('{"a\\": "x"}')
+
+    def testObjectWithCRNewlineAndCommentAndNewlineAndListTuple(self):
+        self.assertRaises(cjsonish.DecodeError, self._testObjectWithCRNewlineAndCommentAndNewlineAndListTuple)
+    def _testObjectWithCRNewlineAndCommentAndNewlineAndListTuple(self):
+        cjsonish.decode('{"a":null, \r    // nothing  \r"tup":(1,"a",True,),\r  }')
+
+    def testObjectWithCRNewlineAndCommentAndNewlineAndListListAndCapitalizedTrue(self):
+        self.assertRaises(
+            cjsonish.DecodeError,
+            self._testObjectWithCRNewlineAndCommentAndNewlineAndListListAndCapitalizedTrue
+        )
+    def _testObjectWithCRNewlineAndCommentAndNewlineAndListListAndCapitalizedTrue(self):
+        cjsonish.decode('{"a":null, \r    // nothing  \r"tup":[1,"a",True,],\r  }')
+
+    def testObjectWithCRNewlineAndCommentAndNewlineAndListListAndLowercaseTrue(self):
+        obj = cjsonish.decode('{"a":null, \r    // nothing  \r"tup":[1,"a",true,],\r  }')
+        self.assertEqual({"a": None, "tup": [1, "a", True],}, obj)
+
+    def testObjectWithoutLeadingZeroInNumber(self):
+        obj = cjsonish.decode('{"a":.123,} // nothing')
+        self.assertEqual({"a": 0.123,}, obj)
+
+    def testObjectWithEscapeLineContinuationsLoose(self):
+        obj = cjsonish.decode('{"string": "blah blah \\\n more blahs \\\r\n",} // nothing')
+        self.assertEqual({"string": "blah blah  more blahs ",}, obj)
+
+    def testObjectWithEscapeLineContinuations(self):
+        self.assertRaises(cjsonish.DecodeError, self._testObjectWithEscapeLineContinuations)
+    def _testObjectWithEscapeLineContinuations(self):
+        cjsonish.decode('{"string": "blah blah \\\n more blahs \\\r\n",} // nothing', strict=True)
+
+    def testDecodeWithNewLinesLoose_01(self):
+        self.assertRaises(cjsonish.DecodeError, self._testDecodeWithNewLinesLoose_01)
+    def _testDecodeWithNewLinesLoose_01(self):
+        cjsonish.decode('{"string": "blah blah \n more blahs \r\n",} // nothing')
+
+    def testDecodeWithNewLinesLoose_02(self):
+        # cjsonish accects newlines but they have to be escaped
+        # (you can't just hit Enter in the middle of typing a string).
+        obj = cjsonish.decode('{"string": "blah blah \\n more blahs \\r\\n",} // nothing')
+        self.assertEqual({"string": "blah blah \n more blahs \r\n",}, obj)
+
+    def testDecodeWithNewLinesStrict(self):
+        self.assertRaises(cjsonish.DecodeError, self._testDecodeWithNewLinesStrict)
+    def _testDecodeWithNewLinesStrict(self):
+        cjsonish.decode('{"string": "blah blah \n more blahs \r\n"}', strict=True)
+
+    def testObjectBasicString_01(self):
+        obj = cjsonish.decode(r'"\\"')
+        self.assertEqual('\\', obj)
+        obj = cjsonish.decode("\"\\\\\"")
+        self.assertEqual('\\', obj)
+
+    def testObjectBasicString_02(self):
+        obj = cjsonish.decode('"\"')
+        # This reduces to the empty string because '"\"' is interpreted
+        # by Python as '""'.
+        self.assertEqual('', obj)
+    def testObjectBasicString_03(self):
+        self.assertRaises(cjsonish.DecodeError, self._testObjectBasicString_03)
+    def _testObjectBasicString_03(self):
+        cjsonish.decode('"\\"')
+
+    def testObjectBasicString_04(self):
+        obj = cjsonish.encode("\f")
+        self.assertEqual('"\\f"', obj)
+
+    def testDecodeBasicList(self):
+        obj = cjsonish.decode(" [ true, false,null] ")
+        self.assertEqual([True, False, None], obj)
+
+    def testEncodeStringEscapes(self):
+        # FIXME: How do you account for ordering?
+        #  obj = cjsonish.encode({"a\"b": 'zz', "22": (1,2),})
+        # because it's one of these:
+        #  self.assertEqual('{"a\\"b": "zz", "22": [1, 2]}', obj)
+        #  self.assertEqual('{"22": [1, 2], "a\\"b": "zz"}', obj)
+        obj = cjsonish.encode({"a\"b": 'zz'})
+        self.assertEqual('{"a\\"b": "zz"}', obj)
+        obj = cjsonish.encode({"22": (1,2),})
+        self.assertEqual('{"22": [1, 2]}', obj)
+
+    def testEncodeUnicodeStringLeader(self):
+        obj = cjsonish.encode([u'xx','yy'])
+        self.assertEqual('["xx", "yy"]', obj)
+
+    def testDecodeSolidus_01(self):
+        obj = cjsonish.decode('{"string": "\/",}')
+        self.assertEqual({'string': '/'}, obj)
+
+    def testDecodeSolidus_02(self):
+        obj = cjsonish.decode('{"string": "o\/g",}')
+        self.assertEqual({'string': 'o/g'}, obj)
+
+    def testDecodeSolidus_03(self):
+        obj = cjsonish.decode('{"string": "hello\/goodbye",}')
+        self.assertEqual({'string': 'hello/goodbye'}, obj)
+
+    def testDecodeSolidus_04(self):
+        obj = cjsonish.decode('{"string": "hello/goodbye",}')
+        self.assertEqual({'string': 'hello/goodbye'}, obj)
+
+    def testEncodeSolidus_01(self):
+        obj = cjsonish.encode("{'string': 'hello/goodbye'}")
+        self.assertEqual('"{\'string\': \'hello\\/goodbye\'}"', obj)
+
+    def testEncodeSolidus_02(self):
+        obj = cjsonish.encode("{'string': 'hello\/goodbye'}")
+        # NOTE: This might look wrong and you might think it should be: 'hello\\/goodbye'
+        #       But [lb]'s understanding of the spec. is that \/ is for
+        #       decoding: it's stripped on input, so if \/ is being encoded,
+        #       it's a backslash which we need to escape, followed by a
+        #       solidus which also needs to be escaped.
+        self.assertEqual('"{\'string\': \'hello\\\\\\/goodbye\'}"', obj)
+
+    def testDecodeStringEscapedSolidusAndTrailingComma(self):
+        self.assertRaises(cjsonish.DecodeError, self._testDecodeStringEscapedSolidusAndTrailingComma)
+    def _testDecodeStringEscapedSolidusAndTrailingComma(self):
+        cjsonish.decode('{"string": "hello\/goodbye",}', strict=True)
+
+    def testDecodeStringEscapedSolidusAndNoTrailingComma(self):
+        obj = cjsonish.decode('{"string": "hello\/goodbye"}', strict=True)
+        self.assertEqual({"string": "hello/goodbye",}, obj)
+
+    def testDecodeObjectWithTrailingOnelineComment(self):
+        self.assertRaises(cjsonish.DecodeError, self._testDecodeObjectWithTrailingOnelineComment)
+    def _testDecodeObjectWithTrailingOnelineComment(self):
+        cjsonish.decode('{"string": "blah blah more blahs "} // nothing', strict=True)
+
+    def testDecodeLineContinuationsAndOtherEscapes(self):
+        obj = cjsonish.decode('{"x\t\\\/": "a green \\\r cow \t mooed \f oh heavens \b\b\b",}')
+        self.assertEqual({'x\t\\/': 'a green  cow \t mooed \x0c oh heavens \x08\x08\x08'}, obj)
 
 def main():
     unittest.main()
