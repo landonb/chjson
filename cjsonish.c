@@ -1,6 +1,6 @@
 // File: cjsonish.c
 // Author: Landon Bouma (landonb &#x40; retrosoft &#x2E; com)
-// Last Modified: 2015.09.25
+// Last Modified: 2015.10.07
 // Project Page: https://github.com/landonb/cjsonish
 // Original Code: Copyright (C) 2006-2007 Dan Pascu <dan@ag-projects.com>
 // License: GPLv3
@@ -25,6 +25,7 @@ typedef struct JSONData {
     char *end; // pointer to the string end
     char *ptr; // pointer to the current parsing position
     int  all_unicode; // make all output strings unicode if true
+    int strict; // expect strict JSON format if true
     long lineno;
     long offset;
 } JSONData;
@@ -236,7 +237,6 @@ void skip_spaces(JSONData *jsondata)
             break;
         }
         else if (isspace(ch)) {
-//            (jsondata)->offset++;
             // https://en.wikipedia.org/wiki/Newline
             if (ch == '\n') {
                 if (!prev_ch_was_CR) {
@@ -267,43 +267,50 @@ void skip_spaces(JSONData *jsondata)
                 prev_ch_was_LF = False;
             }
         }
-        else if (in_multiline_comment) {
-            if (('*' == ch) && ('/' == *((jsondata)->ptr + 1))) {
-                jsondata->ptr++;
-                jsondata->offset++;
-                in_multiline_comment = False;
-            }
-        }
-        else if (ch == '/') {
-            if (prev_ch_was_solidus) {
-                // A single-line comment.
-                ch = *(++((jsondata)->ptr));
-                jsondata->offset++;
-                while ((ch != '\0') && (ch != '\r') && (ch != '\n')) {
-                    ch = *(++((jsondata)->ptr));
-                    jsondata->offset++;
-                }
-                // Let newline do it: jsondata_mv_ptr(jsondata, 0, 1);
-                prev_ch_was_solidus = False;
-                continue; // We already got the next ch.
-            }
-            else {
-                prev_ch_was_solidus = True;
-            }
-        }
-        else if ((ch == '*') && (prev_ch_was_solidus)) {
-            // A multi-line comment.
-            in_multiline_comment = True;
-            prev_ch_was_solidus = False;
+        else if (jsondata->strict) {
+            // MEH: We could see if there _is_ a comment following and
+            // add that as a hint to any error output, but whatever.
+            break;
         }
         else {
-            if (prev_ch_was_solidus) {
-                // Deconsume the sole slash.
-                (jsondata)->ptr--;
-                jsondata->offset -= 1;
+            if (in_multiline_comment) {
+                if (('*' == ch) && ('/' == *((jsondata)->ptr + 1))) {
+                    jsondata->ptr++;
+                    jsondata->offset++;
+                    in_multiline_comment = False;
+                }
             }
-            prev_ch_was_solidus = False;
-            break;
+            else if (ch == '/') {
+                if (prev_ch_was_solidus) {
+                    // A single-line comment.
+                    ch = *(++((jsondata)->ptr));
+                    jsondata->offset++;
+                    while ((ch != '\0') && (ch != '\r') && (ch != '\n')) {
+                        ch = *(++((jsondata)->ptr));
+                        jsondata->offset++;
+                    }
+                    // Let newline do it: jsondata_mv_ptr(jsondata, 0, 1);
+                    prev_ch_was_solidus = False;
+                    continue; // We already got the next ch.
+                }
+                else {
+                    prev_ch_was_solidus = True;
+                }
+            }
+            else if ((ch == '*') && (prev_ch_was_solidus)) {
+                // A multi-line comment.
+                in_multiline_comment = True;
+                prev_ch_was_solidus = False;
+            }
+            else {
+                if (prev_ch_was_solidus) {
+                    // Deconsume the sole slash.
+                    (jsondata)->ptr--;
+                    jsondata->offset -= 1;
+                }
+                prev_ch_was_solidus = False;
+                break;
+            }
         }
 
         ch = *(++((jsondata)->ptr));
@@ -329,7 +336,7 @@ decode_null(JSONData *jsondata)
         PyErr_Format(
             JSON_DecodeError,
             "cannot parse JSON description as null: \"%.20s\""
-            " (lineno %ld, offset %ld)",
+                " (lineno %ld, offset %ld)",
             jsondata->ptr, jsondata->lineno, jsondata->offset
         );
         return NULL;
@@ -357,7 +364,7 @@ decode_bool(JSONData *jsondata)
         PyErr_Format(
             JSON_DecodeError,
             "cannot parse JSON description as bool: \"%.20s\""
-            " (lineno %ld, offset %ld)",
+                " (lineno %ld, offset %ld)",
             jsondata->ptr, jsondata->lineno, jsondata->offset
         );
         return NULL;
@@ -372,10 +379,17 @@ decode_string(JSONData *jsondata)
     Py_ssize_t len;
     char *ptr;
 
-    char quote_delim = (*jsondata->ptr); // " or '
+    char quote_delim;
+
+    int was_newline_LF, was_newline_CR, clean_newlines_and_escaped_soliduses;
+    char *clean_ptr, *clean_walk;
+    int clean_iter;
+
+    quote_delim = (jsondata->strict) ? '"' : (*jsondata->ptr); // " or '
 
     // look for the closing quote
     escaping = has_unicode = string_escape = False;
+    was_newline_LF = was_newline_CR = clean_newlines_and_escaped_soliduses = False;
     ptr = jsondata->ptr + 1;
     while (True) {
         c = *ptr;
@@ -401,54 +415,195 @@ decode_string(JSONData *jsondata)
             else if (!isascii(c)) {
                 has_unicode = True;
             }
-        }
-        // cjsonish:
-        else if (c == quote_delim) {
-            string_escape = True;
-            escaping = False;
+            // [lb] added this: the original cjson supports multi-line
+            // quoted strings, which the json standard does not support
+            // (so this was missing). We could let it slide, but Python's
+            // demjson allows multi-line quoted strings using trailing
+            // slash line continuation indicators -- which is also standard
+            // in other languages, like Bash -- so we should follow convention.
+            else if (
+                ((c == '\n') || (c == '\r'))
+                && ((jsondata->strict)
+                    || (   (!((was_newline_LF) && (c == '\r')))
+                        && (!((was_newline_CR) && (c == '\n')))))
+            ) {
+                PyErr_Format(
+                    JSON_DecodeError,
+                    (!jsondata->strict)
+                        ? "invalid string contains newline (hint: use backslash escape continuator) "
+                          "starting at position " SSIZE_T_F " (lineno %ld, offset %ld)"
+                        : "invalid string contains newline "
+                          "starting at position " SSIZE_T_F " (lineno %ld, offset %ld)",
+                    (Py_ssize_t)(jsondata->ptr - jsondata->str),
+                    jsondata->lineno, jsondata->offset
+                );
+                return NULL;
+            }
+            was_newline_LF = False;
+            was_newline_CR = False;
         }
         else {
-            switch(c) {
-            case 'u':
-                has_unicode = True;
-                break;
-            // OC:
-            //  case '"':
-            case 'r':
-            case 'n':
-            case 't':
-            case 'b':
-            case 'f':
-            case '\\':
+            // cjsonish:
+            if (c == quote_delim) {
                 string_escape = True;
-                break;
+            }
+            else if ((c == '\n') && (!jsondata->strict)) {
+                was_newline_LF = True;
+                clean_newlines_and_escaped_soliduses = True;
+            }
+            else if ((c == '\r') && (!jsondata->strict)) {
+                was_newline_CR = True;
+                clean_newlines_and_escaped_soliduses = True;
+            }
+            else {
+                switch(c) {
+                case 'u':
+                    has_unicode = True;
+                    break;
+                // OC:
+                //  case '"':
+                case 'r':
+                case 'n':
+                case 't':
+                case 'b':
+                case 'f':
+                case '\\':
+                    string_escape = True;
+                    break;
+                // The json spec. allows escaping forward slashes, e.g., \/
+                // which helps when embedding JSON in a <script> tag, which
+                // doesn't allow </ inside strings.
+                case '/':
+                    // NOTE: The decode fcn. we call, e.g., PyBytes_DecodeEscape,
+                    //       doesn't think solidus characters are escaped, so we
+                    //       have to remove the preceeding escape character.
+                    clean_newlines_and_escaped_soliduses = True;
+                    break;
+                // MAYBE: default: Do we care?
+                default:
+                    PyErr_Format(
+                        JSON_DecodeError,
+                        "invalid string contains unrecognized backslash escape "
+                            "starting at position " SSIZE_T_F " (lineno %ld, offset %ld)",
+                        (Py_ssize_t)(jsondata->ptr - jsondata->str),
+                        jsondata->lineno, jsondata->offset
+                    );
+                    return NULL;
+                }
             }
             escaping = False;
         }
         ptr++;
     }
+    if (escaping) {
+        PyErr_Format(
+            JSON_DecodeError,
+            "invalid string contains trailing backslash escape "
+                "starting at position " SSIZE_T_F " (lineno %ld, offset %ld)",
+            (Py_ssize_t)(jsondata->ptr - jsondata->str),
+            jsondata->lineno, jsondata->offset
+        );
+        return NULL;
+    }
 
     len = ptr - jsondata->ptr - 1;
 
+    // Copy the string buffer and remove line continuations.
+    if (clean_newlines_and_escaped_soliduses) {
+        // Allocate new buffer.
+        clean_ptr = (char *)PyMem_Malloc(len + 1); // Add one for NULL;
+        if (clean_ptr == NULL) {
+            // MAYBE: Need to worry about PyErr_Format, or was it set?
+            //return NULL;
+            return PyErr_NoMemory();
+        }
+        clean_walk = clean_ptr;
+        // Copy characters, ignoring escaped newlines and solidi.
+        // We start at one to skip the quote.
+        for (clean_iter = 1; clean_iter <= len; clean_iter++) {
+            c = jsondata->ptr[clean_iter];
+            if (c == '\\') {
+                if ((clean_iter + 1) <= len) {
+                    if (
+                           (jsondata->ptr[clean_iter + 1] == '\r')
+                        || (jsondata->ptr[clean_iter + 1] == '\n')
+                    ) {
+                        // Skip delimiter and newline. Only add one
+                        // here because for loop will bump another.
+                        clean_iter += 1;
+                        if ((clean_iter + 1) <= len) {
+                            if (
+                                   (jsondata->ptr[clean_iter + 1] == '\r')
+                                || (jsondata->ptr[clean_iter + 1] == '\n')
+                            ) {
+                                clean_iter += 1; // Skip second newline.
+                            }
+                        }
+                    }
+                    else if (jsondata->ptr[clean_iter + 1] == '/') {
+                        // An escaped solidus. We'll just loop and the
+                        // solidus will be copied, but not the escape.
+                    }
+                    else {
+                        // A different escaped character, so copy the escape.
+                        *clean_walk++ = c;
+                    }
+                }
+                else {
+                    // The string ends in backslash, so above parsing would
+                    // have bailed on error.
+                    // MAYBE: assert false; // This code should be unreachable.
+                    PyErr_Format(
+                        JSON_DecodeError,
+                        "unexpected parse error: string ends in stray backslash escape "
+                            "starting at position " SSIZE_T_F " (lineno %ld, offset %ld)",
+                        (Py_ssize_t)(jsondata->ptr - jsondata->str),
+                        jsondata->lineno, jsondata->offset
+                    );
+                    return NULL;
+                }
+            }
+            else {
+                // Not an escape character.
+                *clean_walk++ = c;
+            }
+        }
+        // We really don't need a trailing NULL since we're explict about
+        // the length, but it's nice being complete.
+        *clean_walk++ = 0;
+        // Update the len.
+        len = clean_walk - clean_ptr - 1; // Sub 1 for NULL.
+        // Not necessary: PyMem_Realloc(clean_ptr, len);
+    }
+    else {
+        clean_ptr = jsondata->ptr + 1; // Skip the opening quote.
+    }
+
     if (has_unicode || jsondata->all_unicode) {
-        object = PyUnicode_DecodeUnicodeEscape(jsondata->ptr+1, len, NULL);
+        object = PyUnicode_DecodeUnicodeEscape(clean_ptr, len, NULL);
     }
     else if (string_escape) {
-#if PY_MAJOR_VERSION >= 3
-        PyObject *obj = PyBytes_DecodeEscape(jsondata->ptr+1, len, NULL, 0, NULL);
+        #if PY_MAJOR_VERSION >= 3
+        PyObject *obj = PyBytes_DecodeEscape(clean_ptr, len, NULL, 0, NULL);
         object = PyUnicode_FromEncodedObject(obj, /*encoding=*/NULL, /*errors=*/NULL);
         Py_DECREF(obj);
         if (object == NULL) {
-            // MAYBE: Set error object?
+            // MAYBE: Set error object? Or did Py*_*() command set it?
             return NULL;
         }
-#else
-        object = PyString_DecodeEscape(jsondata->ptr+1, len, NULL, 0, NULL);
-#endif
+        #else
+        object = PyString_DecodeEscape(clean_ptr, len, NULL, 0, NULL);
+        #endif
     }
     else {
-        object = PYUNICODE_FROMSTRINGANDSIZE(jsondata->ptr+1, len);
+        object = PYUNICODE_FROMSTRINGANDSIZE(clean_ptr, len);
     }
+
+    if (clean_newlines_and_escaped_soliduses) {
+        PyMem_Free(clean_ptr);
+    }
+    // Not necessary, but we could reset len:
+    //  len = ptr - jsondata->ptr - 1;
 
     if (object == NULL) {
         PyObject *type, *value, *tb, *reason;
@@ -462,7 +617,8 @@ decode_string(JSONData *jsondata)
                 (Py_ssize_t)(jsondata->ptr - jsondata->str),
                 jsondata->lineno, jsondata->offset
             );
-        } else {
+        }
+        else {
             if (PyErr_GivenExceptionMatches(type, PyExc_UnicodeDecodeError)) {
                 reason = PyObject_GetAttrString(value, "reason");
                 PyErr_Format(
@@ -471,7 +627,6 @@ decode_string(JSONData *jsondata)
                         ": %s (lineno %ld, offset %ld)",
                     (Py_ssize_t)(jsondata->ptr - jsondata->str),
                     #if PY_MAJOR_VERSION >= 3
-                    //reason ? PyBytes_AsString(reason) : "bad format");
                     reason ? PyUnicode_AsUTF8(reason) : "bad format",
                     #else
                     reason ? PyString_AsString(reason) : "bad format",
@@ -530,7 +685,7 @@ decode_inf(JSONData *jsondata)
         PyErr_Format(
             JSON_DecodeError,
             "cannot parse JSON description as Inf.: %.20s"
-            " (lineno %ld, offset %ld)",
+                " (lineno %ld, offset %ld)",
             jsondata->ptr, jsondata->lineno, jsondata->offset
         );
         return NULL;
@@ -554,7 +709,7 @@ decode_nan(JSONData *jsondata)
         PyErr_Format(
             JSON_DecodeError,
             "cannot parse JSON description as NaN: %.20s"
-            " (lineno %ld, offset %ld)",
+                " (lineno %ld, offset %ld)",
             jsondata->ptr, jsondata->lineno, jsondata->offset
         );
         return NULL;
@@ -594,7 +749,7 @@ decode_number(JSONData *jsondata)
         skipDigits(ptr);
     }
     // cjsonish: leading '0' digit not required.
-    else if (*ptr == '.') {
+    else if ((*ptr == '.') && (!jsondata->strict)) {
         ; // We'll handle this next.
     }
     else {
@@ -740,9 +895,13 @@ decode_array(JSONData *jsondata)
             else if (c == ',') {
                 //jsondata->ptr++;
                 jsondata_mv_ptr(jsondata, 1, 0);
-                // cjsonish: Allow trailing comma.
-                //next_state = ArrayItem;
-                next_state = ArrayItem_or_ClosingBracket;
+                if (jsondata->strict) {
+                    next_state = ArrayItem;
+                }
+                else {
+                    // cjsonish: Allow trailing comma.
+                    next_state = ArrayItem_or_ClosingBracket;
+                }
             }
             else {
                 PyErr_Format(
@@ -780,7 +939,7 @@ decode_object(JSONData *jsondata)
 {
     PyObject *object, *key, *value;
     DictionaryState next_state;
-    int c, result;
+    int c, result, trailing_comma = False;
     char *start;
 
     object = PyDict_New();
@@ -808,6 +967,7 @@ decode_object(JSONData *jsondata)
         switch (next_state) {
         case DictionaryKey_or_ClosingBrace:
             if (c == '}') {
+                trailing_comma = False;
                 //jsondata->ptr++;
                 jsondata_mv_ptr(jsondata, 1, 0);
                 next_state = DictionaryDone;
@@ -817,7 +977,7 @@ decode_object(JSONData *jsondata)
             // OC:
             //  if (c != '"') {
             // cjsonish loose quotes:
-            if ((c != '"') && (c != '\'')) {
+            if ((c != '"') && ((jsondata->strict) || (c != '\''))) {
                 // MAYBE: Make a real Python exception type class. 
                 // For now, when you catch the exception in Python, the dict is parts of
                 // args, e.g., catch JSON_DecodeError as e can be accessed e.args[0]['offset'].
@@ -831,15 +991,27 @@ decode_object(JSONData *jsondata)
                 Py_DECREF(d);
                 goto failure;
                 */
-                PyErr_Format(
-                    JSON_DecodeError,
-                    "expecting object property name at position " SSIZE_T_F
-                        " (lineno %ld, offset %ld)",
-                    (Py_ssize_t)(jsondata->ptr - jsondata->str),
-                    jsondata->lineno, jsondata->offset
-                );
+                if (trailing_comma) {
+                    PyErr_Format(
+                        JSON_DecodeError,
+                        "expecting object property name rather than trailing comma "
+                        "at position " SSIZE_T_F " (lineno %ld, offset %ld)",
+                        (Py_ssize_t)(jsondata->ptr - jsondata->str),
+                        jsondata->lineno, jsondata->offset
+                    );
+                }
+                else {
+                    PyErr_Format(
+                        JSON_DecodeError,
+                        "expecting object property name at position "
+                            SSIZE_T_F " (lineno %ld, offset %ld)",
+                        (Py_ssize_t)(jsondata->ptr - jsondata->str),
+                        jsondata->lineno, jsondata->offset
+                    );
+                }
                 goto failure;
             }
+            trailing_comma = False;
 
             key = decode_json(jsondata);
             if (key == NULL) {
@@ -891,6 +1063,7 @@ decode_object(JSONData *jsondata)
             next_state = Comma_or_ClosingBrace;
             break;
         case Comma_or_ClosingBrace:
+            trailing_comma = False;
             if (c == '}') {
                 //jsondata->ptr++;
                 jsondata_mv_ptr(jsondata, 1, 0);
@@ -899,9 +1072,14 @@ decode_object(JSONData *jsondata)
             else if (c == ',') {
                 //jsondata->ptr++;
                 jsondata_mv_ptr(jsondata, 1, 0);
-                // cjsonish: Allow trailing comma.
-                //next_state = DictionaryKey;
-                next_state = DictionaryKey_or_ClosingBrace;
+                if (jsondata->strict) {
+                    next_state = DictionaryKey;
+                }
+                else {
+                    // cjsonish: Allow trailing comma.
+                    next_state = DictionaryKey_or_ClosingBrace;
+                }
+                trailing_comma = True;
             }
             else {
                 PyErr_Format(
@@ -915,6 +1093,7 @@ decode_object(JSONData *jsondata)
             }
             break;
         case DictionaryDone:
+            trailing_comma = False;
             // this will never be reached, but keep compilers happy
             break;
         }
@@ -933,66 +1112,71 @@ decode_json(JSONData *jsondata)
     PyObject *object;
 
     skip_spaces(jsondata);
-    switch(*jsondata->ptr) {
-    case 0:
-        PyErr_Format(
-            JSON_DecodeError,
-            "empty JSON description (lineno %ld, offset %ld)",
-            jsondata->lineno, jsondata->offset
-        );
-        return NULL;
-    case '{':
-        object = decode_object(jsondata);
-        break;
-    case '[':
-        object = decode_array(jsondata);
-        break;
-    case '"':
-    // cjsonish loose quotes: single-quoted strings OK
-    case '\'':
+
+    if (
+        (*jsondata->ptr == '"')
+        // cjsonish loose quotes: single-quoted strings OK
+        || ((*jsondata->ptr == '\'') && (!jsondata->strict))
+    ) {
         object = decode_string(jsondata);
-        break;
-    case 't':
-    case 'f':
-        object = decode_bool(jsondata);
-        break;
-    case 'n':
-        object = decode_null(jsondata);
-        break;
-    case 'N':
-        object = decode_nan(jsondata);
-        break;
-    case 'I':
-        object = decode_inf(jsondata);
-        break;
-    case '+':
-    case '-':
-        if (*(jsondata->ptr+1) == 'I') {
+    }
+    else {
+        switch(*jsondata->ptr) {
+        case 0:
+            PyErr_Format(
+                JSON_DecodeError,
+                "empty JSON description (lineno %ld, offset %ld)",
+                jsondata->lineno, jsondata->offset
+            );
+            return NULL;
+        case '{':
+            object = decode_object(jsondata);
+            break;
+        case '[':
+            object = decode_array(jsondata);
+            break;
+        case 't':
+        case 'f':
+            object = decode_bool(jsondata);
+            break;
+        case 'n':
+            object = decode_null(jsondata);
+            break;
+        case 'N':
+            object = decode_nan(jsondata);
+            break;
+        case 'I':
             object = decode_inf(jsondata);
             break;
+        case '+':
+        case '-':
+            if (*(jsondata->ptr+1) == 'I') {
+                object = decode_inf(jsondata);
+                break;
+            }
+            // fall through
+        case '.':
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+            object = decode_number(jsondata);
+            break;
+        default:
+            PyErr_Format(
+                JSON_DecodeError,
+                "cannot parse JSON description as token: \"%c\""
+                    " (lineno %ld, offset %ld)",
+                *(jsondata->ptr), jsondata->lineno, jsondata->offset
+            );
+            return NULL;
         }
-        // fall through
-    case '.':
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
-        object = decode_number(jsondata);
-        break;
-    default:
-        PyErr_Format(
-            JSON_DecodeError,
-            "cannot parse JSON description as token: \"%c\""
-            " (lineno %ld, offset %ld)",
-            *(jsondata->ptr), jsondata->lineno, jsondata->offset
-        );
-        return NULL;
     }
 
     return object;
@@ -1092,6 +1276,10 @@ encode_string(PyObject *obj)
         );
         return NULL;
     }
+    // MEH: We could pre-scan the string to determine the final size
+    //      but it's easier -- and lazier -- to just determine the
+    //      max possible size. Two for the quotes and up to four
+    //      characters per character once we add escapes or UNICODE values.
     newsize = 2 + 4*Py_SIZE(op);
     v = PyString_FromStringAndSize((char *)NULL, newsize);
     if (v == NULL) {
@@ -1112,7 +1300,7 @@ encode_string(PyObject *obj)
         //  ) {
         //      quote = '"';
         //  }
-        // Per JSON standard, dquotes.
+        // Per JSON standard, use dquotes.
         quote = '"';
 
         p = PyString_AS_STRING(v);
@@ -1122,10 +1310,14 @@ encode_string(PyObject *obj)
             // and a closing quote.
             assert(newsize - (p - PyString_AS_STRING(v)) >= 5);
             c = op->ob_sval[i];
-            if (c == quote || c == '\\') {
+            if (
+                (c == quote)
+                || (c == '\\')
+                // Don't forget that JSON escapes forward slashes.
+                || (c == '/')
+            ) {
                 *p++ = '\\', *p++ = c;
             }
-// FIXME: Are we missing \" or \/ ?
             else if (c == '\t') {
                 *p++ = '\\', *p++ = 't';
             }
@@ -1135,7 +1327,7 @@ encode_string(PyObject *obj)
             else if (c == '\r') {
                 *p++ = '\\', *p++ = 'r';
             }
-            // cjsonish additional:
+            // json/cjsonish additional:
             else if (c == '\f') {
                 *p++ = '\\', *p++ = 'f';
             }
@@ -1210,10 +1402,12 @@ encode_unicode(PyObject *unicode)
             dquote++;
             break;
         case '\\':
+        // Don't forget that JSON escapes forward slashes, aka soliduses.
+        case '/':
         case '\t':
         case '\r':
         case '\n':
-        // cjsonish additional:
+        // json/cjsonish additional:
         case '\f':
         case '\b':
             incr = 2;
@@ -1291,15 +1485,15 @@ encode_unicode(PyObject *unicode)
                                       unicode, 0,
                                       isize);
     }
-    else {
-    #else
-    {
+    else
     #endif
+    {
         for (i = 0, o = 1; i < isize; i++) {
             Py_UCS4 ch = PyUnicode_READ(ikind, idata, i);
 
-            // Escape quotes and backslashes
-            if ((ch == quote) || (ch == '\\')) {
+            // Escape quotes and backslashes.
+            // Don't forget the solidus, too.
+            if ((ch == quote) || (ch == '\\') || (ch == '/')) {
                 PyUnicode_WRITE(okind, odata, o++, '\\');
                 PyUnicode_WRITE(okind, odata, o++, ch);
                 continue;
@@ -1318,7 +1512,7 @@ encode_unicode(PyObject *unicode)
                 PyUnicode_WRITE(okind, odata, o++, '\\');
                 PyUnicode_WRITE(okind, odata, o++, 'r');
             }
-            // cjsonish additional:
+            // json/cjsonish additional:
             else if (ch == '\f') {
                 PyUnicode_WRITE(okind, odata, o++, '\\');
                 PyUnicode_WRITE(okind, odata, o++, 'f');
@@ -1333,7 +1527,7 @@ encode_unicode(PyObject *unicode)
                 PyUnicode_WRITE(okind, odata, o++, '\\');
                 // OC:
                 //  PyUnicode_WRITE(okind, odata, o++, 'x');
-                // cjsonish alternate:
+                // json/cjsonish use uXXXX format:
                 PyUnicode_WRITE(okind, odata, o++, 'u');
                 PyUnicode_WRITE(okind, odata, o++, '0');
                 PyUnicode_WRITE(okind, odata, o++, '0');
@@ -1356,7 +1550,7 @@ encode_unicode(PyObject *unicode)
                     if (ch <= 0xff) {
                         // OC:
                         //  PyUnicode_WRITE(okind, odata, o++, 'x');
-                        // cjsonish alternate:
+                        // json/cjsonish uses uXXXX format:
                         PyUnicode_WRITE(okind, odata, o++, 'u');
                         PyUnicode_WRITE(okind, odata, o++, '0');
                         PyUnicode_WRITE(okind, odata, o++, '0');
@@ -1373,6 +1567,7 @@ encode_unicode(PyObject *unicode)
                     }
                     // Map 21-bit characters to '\U00xxxxxx'
                     else {
+                        // FIXME: json/cjsonish: This isn't standard JSON.
                         PyUnicode_WRITE(okind, odata, o++, 'U');
                         PyUnicode_WRITE(okind, odata, o++, Py_hexdigits[(ch >> 28) & 0xF]);
                         PyUnicode_WRITE(okind, odata, o++, Py_hexdigits[(ch >> 24) & 0xF]);
@@ -1620,6 +1815,8 @@ encode_unicode(PyObject *unicode)
         // Escape quotes and backslashes
         if ((quotes && ch == (Py_UNICODE) PyString_AS_STRING(repr)[1])
             || (ch == '\\')
+            // Don't forget that JSON escapes forward slashes.
+            || (ch == '/')
         ) {
             *p++ = '\\';
             *p++ = (char) ch;
@@ -1692,7 +1889,7 @@ encode_unicode(PyObject *unicode)
             *p++ = '\\';
             *p++ = 'r';
         }
-        // cjsonish:
+        // json/cjsonish standard:
         else if (ch == '\f') {
             *p++ = '\\';
             *p++ = 'f';
@@ -1707,7 +1904,7 @@ encode_unicode(PyObject *unicode)
             *p++ = '\\';
             // OC:
             //  *p++ = 'x';
-            // cjsonish:
+            // json/cjsonish uses uXXXX format:
             *p++ = 'u';
             *p++ = '0';
             *p++ = '0';
@@ -2096,7 +2293,7 @@ Done:
 // with the following differences:
 // - An element or sub-element of a list may not reference the list or any
 //   containing parent. In normal, list_repr(), Python just prints ellipses;
-//   in cjsonish, we raine an EncodeError.
+//   in cjsonish, we raise an EncodeError.
 // - We call our own encode_object() rather than Python's PyObject_Repr()
 //   to serialize items, so we can override peculiarities as necessary.
 #if PY_MAJOR_VERSION >= 3
@@ -2422,7 +2619,7 @@ Done:
 // with the following differences:
 // - An element or sub-element of a list may not reference the list or any
 //   containing parent. In normal, list_repr(), Python just prints ellipses;
-//   in cjsonish, we raine an EncodeError.
+//   in cjsonish, we raise an EncodeError.
 // - We call our own encode_object() rather than Python's PyObject_Repr()
 //   to serialize items, so we can override peculiarities as necessary.
 #if PY_MAJOR_VERSION >= 3
@@ -2471,8 +2668,9 @@ encode_dict(PyDictObject *mp)
         PyObject *s;
         int res;
 
-        // cjsonish: dict keys must be strings:
+        // json/cjsonish: dict keys must be strings:
         if (!PyString_Check(key) && !PyUnicode_Check(key)) {
+            // FIXME: Are we missing the line number and column in the error msg?
             PyErr_SetString(
                 JSON_EncodeError,
                 "JSON encodable dictionaries must have string/unicode keys"
@@ -2772,6 +2970,7 @@ encode_dict(PyDictObject *mp)
         int status;
         // cjsonish: dict keys must be strings:
         if (!PyString_Check(key) && !PyUnicode_Check(key)) {
+            // FIXME: Are we missing the line number and column in the error msg?
             PyErr_SetString(
                 JSON_EncodeError,
                 "JSON encodable dictionaries must have string/unicode keys"
@@ -2941,13 +3140,14 @@ JSON_encode(PyObject *self, PyObject *object)
 static PyObject *
 JSON_decode(PyObject *self, PyObject *args, PyObject *kwargs)
 {
-    static char *kwlist[] = {"json", "all_unicode", NULL};
+    static char *kwlist[] = {"json", "all_unicode", "strict", NULL};
     int all_unicode = False; // by default return unicode only when needed
+    int strict = False; // By default, parser is loose.
     PyObject *object, *string, *str;
     JSONData jsondata;
 
     if (!PyArg_ParseTupleAndKeywords(
-        args, kwargs, "O|i:decode", kwlist, &string, &all_unicode)
+        args, kwargs, "O|ii:decode", kwlist, &string, &all_unicode, &strict)
     ) {
         return NULL;
     }
@@ -2977,6 +3177,7 @@ JSON_decode(PyObject *self, PyObject *args, PyObject *kwargs)
     jsondata.ptr = jsondata.str;
     jsondata.end = jsondata.str + str_size;
     jsondata.all_unicode = all_unicode;
+    jsondata.strict = strict;
     jsondata.lineno = 1;
     jsondata.offset = 0;
 
@@ -3015,12 +3216,19 @@ static PyMethodDef cjsonish_methods[] = {
         (PyCFunction)JSON_decode,
         METH_VARARGS|METH_KEYWORDS,
         PyDoc_STR(
-            "decode(string, all_unicode=False) -> parse the JSON representation into\n"
-            "python objects. The optional argument `all_unicode', specifies how to\n"
-            "convert the strings in the JSON representation into python objects.\n"
-            "If it is False (default), it will return strings everywhere possible\n"
-            "and unicode objects only where necessary, else it will return unicode\n"
-            "objects everywhere (this is slower)."
+            "decode(string, all_unicode=False, strict=False) -> \n"
+            "Parse the JSON representation into python objects.\n"
+            "The optional argument, `all_unicode', specifies how to convert the \n"
+            "strings in the JSON representation into python objects. If it is \n"
+            "False (default), it will return strings everywhere possible and \n"
+            "unicode objects only where necessary, else it will return unicode \n"
+            "objects everywhere (which is slower).\n"
+            "The optional argument, `strict', tells the parser to follow the \n"
+            "JSON schema description exactly, otherwise the parser is loose \n"
+            "and allows trailing commas, single- `//' and multi-line `/* */' \n"
+            "comments, single-quote object keys (as opposed to require double- \n"
+            "quotes, fractional numbers without a leading zero (like `.123'), \n"
+            "and multi-line strings with or without line continuation characters.\n"
         )
     },
     {NULL, NULL}  // sentinel
