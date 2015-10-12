@@ -121,6 +121,16 @@ And if you want a python2 build, do it all over again.
     CFLAGS='-Wall -O0 -g' python2 ./setup.py build
     python2 ./setup.py install
 
+.. Python2 Permissions
+.. ~~~~~~~~~~~~~~~~~~~
+.. 
+.. Python2 might complain when you ``import chjson`` that your
+.. ``.python-eggs`` directory is group-/other- writeable. Try this:
+.. 
+.. .. code-block:: bash
+.. 
+..     chmod 2755 ${HOME}/.python-eggs
+
 Production Build
 ^^^^^^^^^^^^^^^^
 
