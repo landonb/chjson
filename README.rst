@@ -1,7 +1,7 @@
-cjsonish
-========
+chjson
+======
 
-The ``cjonish`` Python C extension implements a developer friendly
+The ``chjson`` Python C extension implements a developer friendly
 `JSON <http://www.json.org/>`__ codec.
 
 In addition to the machine-centric JSON standard,
@@ -33,10 +33,10 @@ Simple encoding and decoding string example:
 
 .. code-block:: python
 
-    >>> import cjsonish
-    >>> cjsonish.encode({'q': True, '23': None,})
+    >>> import chjson
+    >>> chjson.encode({'q': True, '23': None,})
     '{"q": true, "23": null}'
-    >>> cjsonish.decode('{"q": true, "23": null /* ignored \n */ , \'abc\': .123, } // ignored')
+    >>> chjson.decode('{"q": true, "23": null /* ignored \n */ , \'abc\': .123, } // ignored')
     {'23': None, 'q': True, 'abc': 0.123}
 
 Simple file decoding example:
@@ -44,8 +44,8 @@ Simple file decoding example:
 .. code-block:: python
 
     >>> try:
-    ...     cjsonish.decode(open(json_path, 'r').read())
-    ... except cjsonish.DecodeError as e:
+    ...     chjson.decode(open(json_path, 'r').read())
+    ... except chjson.DecodeError as e:
     ...     # Log filename, line number, and column (offset).
     ...     fatal('Failed to load file "%s": %s' % (json_path, e.args[0],)
     ...     raise
@@ -53,16 +53,16 @@ Simple file decoding example:
 Strict Mode
 ^^^^^^^^^^^
 
-Yes, ``cjsonish`` can be tricked into adhering to the exact JSON spec.
+Yes, ``chjson`` can be tricked into adhering to the exact JSON spec.
 Just set ``strict=True``.
 
 .. code-block:: python
 
-    >>> import cjsonish
-    >>> cjsonish.decode('{"q": true, "23": null,}', strict=True)
+    >>> import chjson
+    >>> chjson.decode('{"q": true, "23": null,}', strict=True)
     Traceback (most recent call last):
       File "<stdin>", line 1, in <module>
-    cjsonish.DecodeError: expecting object property name rather than
+    chjson.DecodeError: expecting object property name rather than
         trailing comma at position 23 (lineno 1, offset 23)
 
 Performance
@@ -72,8 +72,8 @@ The author tested this plugin against ``demjson`` (the only comparable
 loose (developer-friendly) JSON codec) on 2015.09.25 and saw a seven times
 improvement in performance over ``demjson`` for a real-world usage scenario
 involving reading JSON files in Python, parsing them with either ``demjson`` or
-``cjsonish``, and checking all dictionary values to see if they indicate a JSON
-path that should be side-loaded. (Read: ``cjsonish`` is faster than ``demjson``
+``chjson``, and checking all dictionary values to see if they indicate a JSON
+path that should be side-loaded. (Read: ``chjson`` is faster than ``demjson``
 by around a factor, but it'll depend on your usage scenario.) In real-world
 numbers, application boot time decreased from 6.65 seconds to 0.95 for this
 scenario. Not a crazy gain but enough to ease development pains.
@@ -97,7 +97,7 @@ From the source directory, to make a debug build, try:
 
 .. code-block:: bash
 
-    /bin/rm -rf build/ dist/ python_cjsonish.egg-info/
+    /bin/rm -rf build/ dist/ python_chjson.egg-info/
     python3 ./setup.py clean
     CFLAGS='-Wall -O0 -g' python3 ./setup.py build
     python3 ./setup.py install
@@ -109,14 +109,14 @@ and then, e.g.,
     gdb python3
     b JSON_decode
     run
-    import cjsonish
-    cjsonish.decode('{"my": "example",} // ignored')
+    import chjson
+    chjson.decode('{"my": "example",} // ignored')
 
 And if you want a python2 build, do it all over again.
 
 .. code-block:: bash
 
-    /bin/rm -rf build/ dist/ python_cjsonish.egg-info/
+    /bin/rm -rf build/ dist/ python_chjson.egg-info/
     python2 ./setup.py clean
     CFLAGS='-Wall -O0 -g' python2 ./setup.py build
     python2 ./setup.py install
@@ -139,7 +139,7 @@ Omit the ``CFLAGS`` to make a production build, 'natch.
 ..     # Weird. Need to restrict group write to squelch UserWarning on import.
 ..     chmod 2755 ${HOME}/.python-eggs
 ..     # Finally...
-..     npm install landonb/cjsonish
+..     npm install landonb/chjson
 
 Additional Information
 ----------------------

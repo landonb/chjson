@@ -7,14 +7,14 @@ __version__ = "1.2.0"
 macros = [('MODULE_VERSION', __version__)]
 
 setup(
-    name = "python-cjsonish",
+    name = "python-chjson",
     version = __version__,
     #packages = find_packages(),
     author = "Landon Bouma (using Dan Pascu's python-cjson code)",
     author_email = "XXX",
     #keywords = "XXX XXX XXX",
-    url = "https://github.com/landonb/python-cjsonish",
-    download_url = "https://github.com/landonb/python-cjsonish",
+    url = "https://github.com/landonb/python-chjson",
+    download_url = "https://github.com/landonb/python-chjson",
     description = "Fast and loose JSON encoder/decoder for Python",
     long_description = open('README.rst').read(),
     license = "LGPL",
@@ -28,7 +28,7 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules"
     ],
     ext_modules = [
-        Extension(name='cjsonish', sources=['cjsonish.c'], define_macros=macros)
+        Extension(name='chjson', sources=['chjson.c'], define_macros=macros)
     ]
 )
 

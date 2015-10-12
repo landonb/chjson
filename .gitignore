@@ -1,6 +1,6 @@
 .gitignore
 build/*
 dist/*
-python_cjsonish.egg-info/*
-cjsonish.so
+python_chjson.egg-info/*
+chjson.so
 

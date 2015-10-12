@@ -1,12 +1,12 @@
 Metadata-Version: 1.2
-Name: python-cjsonish
+Name: python-chjson
 Version: 1.2.0
 Summary: Fast and loose JSON encoder/decoder for Python
-Home-page: https://github.com/lbouma/cjsonish
+Home-page: https://github.com/lbouma/chjson
 Author: Landon Bouma (using Dan Pascu's python-cjson code)
 Author-email: XXX
 License: LGPL
-Download-URL: https://github.com/lbouma/cjsonish
+Download-URL: https://github.com/lbouma/chjson
 Description: This module implements a quick and loose JSON encoder/decoder for Python.
         
         Trailing commas,

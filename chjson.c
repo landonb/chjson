@@ -1,7 +1,7 @@
-// File: cjsonish.c
+// File: chjson.c
 // Author: Landon Bouma (landonb &#x40; retrosoft &#x2E; com)
-// Last Modified: 2015.10.07
-// Project Page: https://github.com/landonb/cjsonish
+// Last Modified: 2015.10.12
+// Project Page: https://github.com/landonb/chjson
 // Original Code: Copyright (C) 2006-2007 Dan Pascu <dan@ag-projects.com>
 // License: GPLv3
 // Description: Loose JSON encoder/decoder Python C extension.
@@ -84,7 +84,7 @@ typedef int Py_ssize_t;
     #define MOD_SUCCESS_VAL(val) val
     #define MOD_INIT(name) PyMODINIT_FUNC PyInit_##name(void)
     #define MOD_DEF(ob, name, methods, doc) \
-        ob = PyModule_Create(&cjsonish_moduledef);
+        ob = PyModule_Create(&chjson_moduledef);
     #if PY_MINOR_VERSION >= 4
         #define PYUNICODEWRITER_INIT(writer) _PyUnicodeWriter_Init(&writer);
     #else
@@ -443,7 +443,7 @@ decode_string(JSONData *jsondata)
             was_newline_CR = False;
         }
         else {
-            // cjsonish:
+            // chjson:
             if (c == quote_delim) {
                 string_escape = True;
             }
@@ -748,7 +748,7 @@ decode_number(JSONData *jsondata)
     else if (isdigit(*ptr)) {
         skipDigits(ptr);
     }
-    // cjsonish: leading '0' digit not required.
+    // chjson: leading '0' digit not required.
     else if ((*ptr == '.') && (!jsondata->strict)) {
         ; // We'll handle this next.
     }
@@ -899,7 +899,7 @@ decode_array(JSONData *jsondata)
                     next_state = ArrayItem;
                 }
                 else {
-                    // cjsonish: Allow trailing comma.
+                    // chjson: Allow trailing comma.
                     next_state = ArrayItem_or_ClosingBracket;
                 }
             }
@@ -976,7 +976,7 @@ decode_object(JSONData *jsondata)
         case DictionaryKey:
             // OC:
             //  if (c != '"') {
-            // cjsonish loose quotes:
+            // chjson loose quotes:
             if ((c != '"') && ((jsondata->strict) || (c != '\''))) {
                 // MAYBE: Make a real Python exception type class. 
                 // For now, when you catch the exception in Python, the dict is parts of
@@ -1076,7 +1076,7 @@ decode_object(JSONData *jsondata)
                     next_state = DictionaryKey;
                 }
                 else {
-                    // cjsonish: Allow trailing comma.
+                    // chjson: Allow trailing comma.
                     next_state = DictionaryKey_or_ClosingBrace;
                 }
                 trailing_comma = True;
@@ -1115,7 +1115,7 @@ decode_json(JSONData *jsondata)
 
     if (
         (*jsondata->ptr == '"')
-        // cjsonish loose quotes: single-quoted strings OK
+        // chjson loose quotes: single-quoted strings OK
         || ((*jsondata->ptr == '\'') && (!jsondata->strict))
     ) {
         object = decode_string(jsondata);
@@ -1327,7 +1327,7 @@ encode_string(PyObject *obj)
             else if (c == '\r') {
                 *p++ = '\\', *p++ = 'r';
             }
-            // json/cjsonish additional:
+            // json/chjson additional:
             else if (c == '\f') {
                 *p++ = '\\', *p++ = 'f';
             }
@@ -1407,7 +1407,7 @@ encode_unicode(PyObject *unicode)
         case '\t':
         case '\r':
         case '\n':
-        // json/cjsonish additional:
+        // json/chjson additional:
         case '\f':
         case '\b':
             incr = 2;
@@ -1455,7 +1455,7 @@ encode_unicode(PyObject *unicode)
     //          quote = '"';
     //      }
     //  }
-    // cjonish always uses dquotes:
+    // chjson always uses dquotes:
     quote = '"';
     #if PY_MINOR_VERSION >= 4
     unchanged = (osize == isize);
@@ -1512,7 +1512,7 @@ encode_unicode(PyObject *unicode)
                 PyUnicode_WRITE(okind, odata, o++, '\\');
                 PyUnicode_WRITE(okind, odata, o++, 'r');
             }
-            // json/cjsonish additional:
+            // json/chjson additional:
             else if (ch == '\f') {
                 PyUnicode_WRITE(okind, odata, o++, '\\');
                 PyUnicode_WRITE(okind, odata, o++, 'f');
@@ -1527,7 +1527,7 @@ encode_unicode(PyObject *unicode)
                 PyUnicode_WRITE(okind, odata, o++, '\\');
                 // OC:
                 //  PyUnicode_WRITE(okind, odata, o++, 'x');
-                // json/cjsonish use uXXXX format:
+                // json/chjson use uXXXX format:
                 PyUnicode_WRITE(okind, odata, o++, 'u');
                 PyUnicode_WRITE(okind, odata, o++, '0');
                 PyUnicode_WRITE(okind, odata, o++, '0');
@@ -1550,7 +1550,7 @@ encode_unicode(PyObject *unicode)
                     if (ch <= 0xff) {
                         // OC:
                         //  PyUnicode_WRITE(okind, odata, o++, 'x');
-                        // json/cjsonish uses uXXXX format:
+                        // json/chjson uses uXXXX format:
                         PyUnicode_WRITE(okind, odata, o++, 'u');
                         PyUnicode_WRITE(okind, odata, o++, '0');
                         PyUnicode_WRITE(okind, odata, o++, '0');
@@ -1567,7 +1567,7 @@ encode_unicode(PyObject *unicode)
                     }
                     // Map 21-bit characters to '\U00xxxxxx'
                     else {
-                        // FIXME: json/cjsonish: This isn't standard JSON.
+                        // FIXME: json/chjson: This isn't standard JSON.
                         PyUnicode_WRITE(okind, odata, o++, 'U');
                         PyUnicode_WRITE(okind, odata, o++, Py_hexdigits[(ch >> 28) & 0xF]);
                         PyUnicode_WRITE(okind, odata, o++, Py_hexdigits[(ch >> 24) & 0xF]);
@@ -1765,7 +1765,7 @@ encode_unicode(PyObject *unicode)
     const Py_ssize_t expandsize = 6;
 #endif
 
-    // cjsonish:
+    // chjson:
     Py_UNICODE *s = PyUnicode_AS_UNICODE(unicode);
     // FIXME: Is this right? Use PyUnicode_GET_SIZE and not Py_SIZE?
     Py_ssize_t size = PyUnicode_GET_SIZE(unicode);
@@ -1889,7 +1889,7 @@ encode_unicode(PyObject *unicode)
             *p++ = '\\';
             *p++ = 'r';
         }
-        // json/cjsonish standard:
+        // json/chjson standard:
         else if (ch == '\f') {
             *p++ = '\\';
             *p++ = 'f';
@@ -1904,7 +1904,7 @@ encode_unicode(PyObject *unicode)
             *p++ = '\\';
             // OC:
             //  *p++ = 'x';
-            // json/cjsonish uses uXXXX format:
+            // json/chjson uses uXXXX format:
             *p++ = 'u';
             *p++ = '0';
             *p++ = '0';
@@ -2293,7 +2293,7 @@ Done:
 // with the following differences:
 // - An element or sub-element of a list may not reference the list or any
 //   containing parent. In normal, list_repr(), Python just prints ellipses;
-//   in cjsonish, we raise an EncodeError.
+//   in chjson, we raise an EncodeError.
 // - We call our own encode_object() rather than Python's PyObject_Repr()
 //   to serialize items, so we can override peculiarities as necessary.
 #if PY_MAJOR_VERSION >= 3
@@ -2619,7 +2619,7 @@ Done:
 // with the following differences:
 // - An element or sub-element of a list may not reference the list or any
 //   containing parent. In normal, list_repr(), Python just prints ellipses;
-//   in cjsonish, we raise an EncodeError.
+//   in chjson, we raise an EncodeError.
 // - We call our own encode_object() rather than Python's PyObject_Repr()
 //   to serialize items, so we can override peculiarities as necessary.
 #if PY_MAJOR_VERSION >= 3
@@ -2668,7 +2668,7 @@ encode_dict(PyDictObject *mp)
         PyObject *s;
         int res;
 
-        // json/cjsonish: dict keys must be strings:
+        // json/chjson: dict keys must be strings:
         if (!PyString_Check(key) && !PyUnicode_Check(key)) {
             // FIXME: Are we missing the line number and column in the error msg?
             PyErr_SetString(
@@ -2968,7 +2968,7 @@ encode_dict(PyDictObject *mp)
     i = 0;
     while (PyDict_Next((PyObject *)mp, &i, &key, &value)) {
         int status;
-        // cjsonish: dict keys must be strings:
+        // chjson: dict keys must be strings:
         if (!PyString_Check(key) && !PyUnicode_Check(key)) {
             // FIXME: Are we missing the line number and column in the error msg?
             PyErr_SetString(
@@ -3204,7 +3204,7 @@ JSON_decode(PyObject *self, PyObject *args, PyObject *kwargs)
     return object;
 }
 
-static PyMethodDef cjsonish_methods[] = {
+static PyMethodDef chjson_methods[] = {
     {
         "encode",
         (PyCFunction)JSON_encode,
@@ -3240,12 +3240,12 @@ PyDoc_STRVAR(
 );
 
 #if PY_MAJOR_VERSION >= 3
-static struct PyModuleDef cjsonish_moduledef = {
+static struct PyModuleDef chjson_moduledef = {
     PyModuleDef_HEAD_INIT,
-    "cjsonish", // m_name
+    "chjson", // m_name
     module_doc, // m_doc
     -1, // m_size
-    cjsonish_methods, // m_methods
+    chjson_methods, // m_methods
     NULL, // m_reload
     NULL, // m_traverse
     NULL, // m_clear
@@ -3272,31 +3272,31 @@ module_cleanup(PyObject *m)
     }
 }
 
-MOD_INIT(cjsonish)
+MOD_INIT(chjson)
 {
     PyObject *m;
 
-    MOD_DEF(m, "cjsonish", cjsonish_methods, module_doc);
+    MOD_DEF(m, "chjson", chjson_methods, module_doc);
 
     if (m == NULL) {
         return module_cleanup(NULL);
     }
 
-    JSON_Error = PyErr_NewException("cjsonish.Error", NULL, NULL);
+    JSON_Error = PyErr_NewException("chjson.Error", NULL, NULL);
     if (JSON_Error == NULL) {
         return module_cleanup(NULL);
     }
     Py_INCREF(JSON_Error);
     PyModule_AddObject(m, "Error", JSON_Error);
 
-    JSON_EncodeError = PyErr_NewException("cjsonish.EncodeError", JSON_Error, NULL);
+    JSON_EncodeError = PyErr_NewException("chjson.EncodeError", JSON_Error, NULL);
     if (JSON_EncodeError == NULL) {
         return module_cleanup(NULL);
     }
     Py_INCREF(JSON_EncodeError);
     PyModule_AddObject(m, "EncodeError", JSON_EncodeError);
 
-    JSON_DecodeError = PyErr_NewException("cjsonish.DecodeError", JSON_Error, NULL);
+    JSON_DecodeError = PyErr_NewException("chjson.DecodeError", JSON_Error, NULL);
     if (JSON_DecodeError == NULL) {
         return module_cleanup(NULL);
     }
