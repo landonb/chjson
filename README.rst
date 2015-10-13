@@ -26,6 +26,13 @@ The module is derived from Dan Pascu's Python2 module,
 `python-cjson 1.1.0
 <https://pypi.python.org/pypi/python-cjson>`__.
 
+See also
+`Hjson, the Human JSON
+<http://hjson.org/>`__,
+a pure-py implementation with a
+`very rich syntax.
+<https://github.com/laktak/hjson>`__.
+
 Usage example
 -------------
 
