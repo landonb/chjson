@@ -65,7 +65,7 @@ class JsonTest(unittest.TestCase):
         obj = chjson.decode(r'"\\"')
         self.assertEqual('\\', obj)
     def testReadEscapedEndingQuote(self):
-        self.assertRaises(chjson.decodeError, self._testReadEscapedEndingQuote)
+        self.assertRaises(chjson.DecodeError, self._testReadEscapedEndingQuote)
     def _testReadEscapedEndingQuote(self):
         chjson.decode('"\\"')
 
@@ -411,20 +411,20 @@ class JsonTest(unittest.TestCase):
         self.assertEqual({'a\\u2013b': 123}, obj)
 
     def testObjectWithBackslashAndEndOfString(self):
-        self.assertRaises(chjson.decodeError, self._testObjectWithBackslashAndEndOfString)
+        self.assertRaises(chjson.DecodeError, self._testObjectWithBackslashAndEndOfString)
     def _testObjectWithBackslashAndEndOfString(self):
         # This gets interpreted as a string key ('a": ')
         # missing a colon (and instead finds a stray 'x').
         chjson.decode('{"a\\": "x"}')
 
     def testObjectWithCRNewlineAndCommentAndNewlineAndListTuple(self):
-        self.assertRaises(chjson.decodeError, self._testObjectWithCRNewlineAndCommentAndNewlineAndListTuple)
+        self.assertRaises(chjson.DecodeError, self._testObjectWithCRNewlineAndCommentAndNewlineAndListTuple)
     def _testObjectWithCRNewlineAndCommentAndNewlineAndListTuple(self):
         chjson.decode('{"a":null, \r    // nothing  \r"tup":(1,"a",True,),\r  }')
 
     def testObjectWithCRNewlineAndCommentAndNewlineAndListListAndCapitalizedTrue(self):
         self.assertRaises(
-            chjson.decodeError,
+            chjson.DecodeError,
             self._testObjectWithCRNewlineAndCommentAndNewlineAndListListAndCapitalizedTrue
         )
     def _testObjectWithCRNewlineAndCommentAndNewlineAndListListAndCapitalizedTrue(self):
@@ -440,15 +440,15 @@ class JsonTest(unittest.TestCase):
 
     def testObjectWithEscapeLineContinuationsLoose(self):
         obj = chjson.decode('{"string": "blah blah \\\n more blahs \\\r\n",} // nothing')
-        self.assertEqual({"string": "blah blah  more blahs ",}, obj)
+        self.assertEqual({"string": "blah blah \n more blahs \r\n",}, obj)
 
     def testObjectWithEscapeLineContinuations(self):
-        self.assertRaises(chjson.decodeError, self._testObjectWithEscapeLineContinuations)
+        self.assertRaises(chjson.DecodeError, self._testObjectWithEscapeLineContinuations)
     def _testObjectWithEscapeLineContinuations(self):
         chjson.decode('{"string": "blah blah \\\n more blahs \\\r\n",} // nothing', strict=True)
 
     def testDecodeWithNewLinesLoose_01(self):
-        self.assertRaises(chjson.decodeError, self._testDecodeWithNewLinesLoose_01)
+        self.assertRaises(chjson.DecodeError, self._testDecodeWithNewLinesLoose_01)
     def _testDecodeWithNewLinesLoose_01(self):
         chjson.decode('{"string": "blah blah \n more blahs \r\n",} // nothing')
 
@@ -459,7 +459,7 @@ class JsonTest(unittest.TestCase):
         self.assertEqual({"string": "blah blah \n more blahs \r\n",}, obj)
 
     def testDecodeWithNewLinesStrict(self):
-        self.assertRaises(chjson.decodeError, self._testDecodeWithNewLinesStrict)
+        self.assertRaises(chjson.DecodeError, self._testDecodeWithNewLinesStrict)
     def _testDecodeWithNewLinesStrict(self):
         chjson.decode('{"string": "blah blah \n more blahs \r\n"}', strict=True)
 
@@ -475,7 +475,7 @@ class JsonTest(unittest.TestCase):
         # by Python as '""'.
         self.assertEqual('', obj)
     def testObjectBasicString_03(self):
-        self.assertRaises(chjson.decodeError, self._testObjectBasicString_03)
+        self.assertRaises(chjson.DecodeError, self._testObjectBasicString_03)
     def _testObjectBasicString_03(self):
         chjson.decode('"\\"')
 
@@ -532,7 +532,7 @@ class JsonTest(unittest.TestCase):
         self.assertEqual('"{\'string\': \'hello\\\\\\/goodbye\'}"', obj)
 
     def testDecodeStringEscapedSolidusAndTrailingComma(self):
-        self.assertRaises(chjson.decodeError, self._testDecodeStringEscapedSolidusAndTrailingComma)
+        self.assertRaises(chjson.DecodeError, self._testDecodeStringEscapedSolidusAndTrailingComma)
     def _testDecodeStringEscapedSolidusAndTrailingComma(self):
         chjson.decode('{"string": "hello\/goodbye",}', strict=True)
 
@@ -541,13 +541,22 @@ class JsonTest(unittest.TestCase):
         self.assertEqual({"string": "hello/goodbye",}, obj)
 
     def testDecodeObjectWithTrailingOnelineComment(self):
-        self.assertRaises(chjson.decodeError, self._testDecodeObjectWithTrailingOnelineComment)
+        self.assertRaises(chjson.DecodeError, self._testDecodeObjectWithTrailingOnelineComment)
     def _testDecodeObjectWithTrailingOnelineComment(self):
         chjson.decode('{"string": "blah blah more blahs "} // nothing', strict=True)
 
     def testDecodeLineContinuationsAndOtherEscapes(self):
         obj = chjson.decode('{"x\t\\\/": "a green \\\r cow \t mooed \f oh heavens \b\b\b",}')
-        self.assertEqual({'x\t\\/': 'a green  cow \t mooed \x0c oh heavens \x08\x08\x08'}, obj)
+        self.assertEqual({'x\t\\/': 'a green \r cow \t mooed \x0c oh heavens \x08\x08\x08'}, obj)
+
+    def testSingleLineCommentAndLineContinuation_1(self):
+        obj = chjson.decode('{"SQL Statement": "SELECT foo; -- A comment. \\\rSELECT bar;",}')
+        self.assertEqual({'SQL Statement': 'SELECT foo; -- A comment. \rSELECT bar;'}, obj)
+
+    def testSingleLineCommentAndLineContinuation_2(self):
+        obj = chjson.decode('{"SQL Statement": "SELECT foo; -- A comment. \rSELECT bar;",}')
+        self.assertEqual({'SQL Statement': 'SELECT foo; -- A comment. \rSELECT bar;'}, obj)
+
 
 def main():
     unittest.main()

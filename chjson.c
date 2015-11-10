@@ -1,6 +1,6 @@
 // File: chjson.c
 // Author: Landon Bouma (landonb &#x40; retrosoft &#x2E; com)
-// Last Modified: 2015.10.12
+// Last Modified: 2015.11.10
 // Project Page: https://github.com/landonb/chjson
 // Original Code: Copyright (C) 2006-2007 Dan Pascu <dan@ag-projects.com>
 // License: GPLv3
@@ -439,6 +439,7 @@ decode_string(JSONData *jsondata)
                 );
                 return NULL;
             }
+            // else, ignore this char.
             was_newline_LF = False;
             was_newline_CR = False;
         }
@@ -528,14 +529,16 @@ decode_string(JSONData *jsondata)
                            (jsondata->ptr[clean_iter + 1] == '\r')
                         || (jsondata->ptr[clean_iter + 1] == '\n')
                     ) {
-                        // Skip delimiter and newline. Only add one
-                        // here because for loop will bump another.
+                        // Skip the line continuation but keep the newline(s).
+                        *clean_walk++ = jsondata->ptr[clean_iter + 1];
+                        // Only increment once because for loop will do another.
                         clean_iter += 1;
                         if ((clean_iter + 1) <= len) {
                             if (
                                    (jsondata->ptr[clean_iter + 1] == '\r')
                                 || (jsondata->ptr[clean_iter + 1] == '\n')
                             ) {
+                                *clean_walk++ = jsondata->ptr[clean_iter + 1];
                                 clean_iter += 1; // Skip second newline.
                             }
                         }
