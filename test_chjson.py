@@ -534,7 +534,7 @@ class JsonTest(unittest.TestCase):
     def testDecodeStringEscapedSolidusAndTrailingComma(self):
         self.assertRaises(chjson.DecodeError, self._testDecodeStringEscapedSolidusAndTrailingComma)
     def _testDecodeStringEscapedSolidusAndTrailingComma(self):
-        chjson.decode('{"string": "hello\/goodbye",}', strict=True)
+        obj = chjson.decode('{"string": "hello\/goodbye",}', strict=True)
 
     def testDecodeStringEscapedSolidusAndNoTrailingComma(self):
         obj = chjson.decode('{"string": "hello\/goodbye"}', strict=True)
@@ -543,7 +543,7 @@ class JsonTest(unittest.TestCase):
     def testDecodeObjectWithTrailingOnelineComment(self):
         self.assertRaises(chjson.DecodeError, self._testDecodeObjectWithTrailingOnelineComment)
     def _testDecodeObjectWithTrailingOnelineComment(self):
-        chjson.decode('{"string": "blah blah more blahs "} // nothing', strict=True)
+        obj = chjson.decode('{"string": "blah blah more blahs "} // nothing', strict=True)
 
     def testDecodeLineContinuationsAndOtherEscapes(self):
         obj = chjson.decode('{"x\t\\\/": "a green \\\r cow \t mooed \f oh heavens \b\b\b",}')
@@ -554,9 +554,9 @@ class JsonTest(unittest.TestCase):
         self.assertEqual({'SQL Statement': 'SELECT foo; -- A comment. \rSELECT bar;'}, obj)
 
     def testSingleLineCommentAndLineContinuation_2(self):
+        self.assertRaises(chjson.DecodeError, self._testSingleLineCommentAndLineContinuation_2)
+    def _testSingleLineCommentAndLineContinuation_2(self):
         obj = chjson.decode('{"SQL Statement": "SELECT foo; -- A comment. \rSELECT bar;",}')
-        self.assertEqual({'SQL Statement': 'SELECT foo; -- A comment. \rSELECT bar;'}, obj)
-
 
 def main():
     unittest.main()
