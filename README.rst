@@ -158,6 +158,16 @@ Omit the ``CFLAGS`` to make a production build, 'natch.
 ..     # Finally...
 ..     npm install landonb/chjson
 
+Troubleshooting
+^^^^^^^^^^^^^^^
+
+If the Python2 binary builds but fails to load when imported, you may
+have built with Python3 libraries on your path. Try this:
+
+.. code-block:: bash
+
+    CPPFLAGS='' LDFLAGS='' python2 ./setup.py build
+
 Additional Information
 ----------------------
 
