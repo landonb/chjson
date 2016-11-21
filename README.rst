@@ -14,11 +14,11 @@ it accepts developer-pleasing syntax:
 * Multi-line strings -- either use a line continuation character at the end
   of lines (and it and the newline will be removed from the string), or just
   start a new line before the string closing quote (and the newline will be
-  left in the string)..
+  left in the string).
 
-and it reports the line number and character offset on error.
+And it reports the line number and character offset on error.
 
-This module works in Python 2.7, 3.3., and 3.4.
+This module works in Python 2.7, 3.3, and 3.4.
 
 It should be easy to adapt to other versions as necessary.
 
