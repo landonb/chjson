@@ -3,4 +3,5 @@ build/*
 dist/*
 python_chjson.egg-info/*
 chjson.so
+chjson.cpython-*-x86_64-linux-gnu.so
 
